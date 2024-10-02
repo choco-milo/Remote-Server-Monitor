@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Monitor</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script>
+        function clearFlashMessages() {
+            // Clear flash messages when a new file is selected
+            var flashMessages = document.querySelector(".flash");
+            if (flashMessages) {
+                flashMessages.innerHTML = ""; // Clear messages
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Server Monitoring Tool</h1>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul class="flash">
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+        <form method="post" enctype="multipart/form-data">
+            <label for="file">Choose Excel file:</label>
+            <input type="file" name="file" id="file" accept=".xlsx, .xls" required onchange="clearFlashMessages();">
+            <input type="submit" value="Process and Download">
+        </form>
+    </div>
+</body>
+</html>

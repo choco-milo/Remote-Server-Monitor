@@ -1,9 +1,7 @@
 import pandas as pd 
 import paramiko
 from io import StringIO
-
-
-
+import socket
 
 def connect_to_server(hostname, port, username, password, commands):
     try:
@@ -21,64 +19,58 @@ def connect_to_server(hostname, port, username, password, commands):
 
     except paramiko.AuthenticationException:
         return "Wrong password"
+    except (paramiko.SSHException, socket.timeout) as e:
+        return f"Connection error: {str(e)}"
     except Exception as e:
-        return str(e)
-
-
-
+        return f"An unexpected error occurred: {str(e)}"
 
 def parse_df_output(output):
-    df = pd.read_csv(StringIO(output),  sep='\s+')
-    return df
+    try:
+        df = pd.read_csv(StringIO(output), sep='\s+')
+        return df
+    except pd.errors.EmptyDataError:
+        return None
+    except Exception as e:
+        print(f"Error parsing output: {e}")
+        return None
 
-
-
-
-
-
-
-
-
-if __name__ == "__main__":
-    servers_df = pd.read_excel('input2.xlsx')
+def process_servers(servers_df):
     results = []
-    
-    # Commands
-    commands = ["df -h --total", 
-            "mpstat 1 1 | awk 'NR==4{print  100-$12}'",
-            "free -h | awk 'NR==2{print ($3/$2)*100}'"
-                ]
+    commands = [
+        "df -h --total", 
+        "mpstat 1 1 | awk 'NR==4{print 100-$12}'",
+        "free -h | awk 'NR==2{print ($3/$2)*100}'"
+    ]
 
     for index, row in servers_df.iterrows():
         hostname = row['servers']
         port = row['port']
         username = row['username']
         password = row['password']
+        
         result = connect_to_server(hostname, port, username, password, commands)
         
-
-
-
-        if result == "Wrong password":
+        if isinstance(result, str):  # If the result is an error message
             print(f"Failed to connect to {hostname}: {result}")
-        else:   
-            df = parse_df_output(result[0])
-            disk_usage = df.iloc[-1]["Use%"]
-            total_capacity = result[1].strip()+'%'
-            ram_usage = result[2].strip()+'%'
+            continue  # Skip to the next server
+        
+        df = parse_df_output(result[0])
+        if df is not None and not df.empty:
+            try:
+                disk_usage = df.iloc[-1]["Use%"] if "Use%" in df.columns else 'N/A'
+                cpu = result[1] + '%'
+                ram_usage = result[2].strip() + '%'
 
-            results.append({
-                'hostname': hostname,
-                'total_size': disk_usage,
-                'capacity': total_capacity,
-                'RAM': ram_usage
-            })
-                
+                results.append({
+                    'hostname': hostname,
+                    'username': username,
+                    'disk_usage': disk_usage,
+                    'cpu': cpu,
+                    'RAM': ram_usage
+                })
+            except Exception as e:
+                print(f"Error processing data from {hostname}: {e}")
+        else:
+            print(f"Invalid output from {hostname}, skipping.")
 
-
-    final_results_df = pd.DataFrame(results)
-    final_results_df.to_csv('output.csv', index=False)
-
-
-
-
+    return results
