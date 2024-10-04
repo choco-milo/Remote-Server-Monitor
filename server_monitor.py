@@ -3,6 +3,7 @@ import paramiko
 from io import StringIO
 import socket
 
+
 def connect_to_server(hostname, port, username, password, commands):
     try:
         client = paramiko.SSHClient()
@@ -36,9 +37,10 @@ def parse_df_output(output):
 
 def process_servers(servers_df):
     results = []
+    message = []
     commands = [
         "df -h --total", 
-        "mpstat 1 1 | awk 'NR==4{print 100-$12}'",
+        "mpstat 1 1 | awk 'NR==4{print $3 + $4 + $5 + $6}'",
         "free -h | awk 'NR==2{print ($3/$2)*100}'"
     ]
 
@@ -50,9 +52,9 @@ def process_servers(servers_df):
         
         result = connect_to_server(hostname, port, username, password, commands)
         
-        if isinstance(result, str):  # If the result is an error message
-            print(f"Failed to connect to {hostname}: {result}")
-            continue  # Skip to the next server
+        if isinstance(result, str):  
+            message.append((f"Failed to connect to {hostname, username}: {result}"))
+            continue  
         
         df = parse_df_output(result[0])
         if df is not None and not df.empty:
@@ -69,8 +71,8 @@ def process_servers(servers_df):
                     'RAM': ram_usage
                 })
             except Exception as e:
-                print(f"Error processing data from {hostname}: {e}")
+                message.append((f"Error processing data from {hostname}: {e}"))
         else:
-            print(f"Invalid output from {hostname}, skipping.")
+            message.append((f"Invalid output from {hostname}, skipping."))
 
-    return results
+    return results, message
