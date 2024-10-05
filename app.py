@@ -41,20 +41,19 @@ def index():
                 flash(f'Error reading Excel file: {e}')
                 return redirect(request.url)
 
-            results, messages = process_servers(servers_df)
+            template_path = 'server_template.xlsx'
+            output_filename = f'Server_Capacity_{time.strftime("%Y-%m-%d")}.xlsx'
+            output_filepath = os.path.join(app.config['DOWNLOAD_FOLDER'], output_filename)
+
+            messages = process_servers(servers_df, template_path, output_filepath)
 
             for msg in messages:
                 flash(msg)
 
-            if results:
-                final_results_df = pd.DataFrame(results)
-                output_filename = f'Server_Capacity_{time.strftime("%Y-%m-%d")}.csv'
-                output_filepath = os.path.join(app.config['DOWNLOAD_FOLDER'], output_filename)
-                final_results_df.to_csv(output_filepath, index=False)
-
+            if os.path.exists(output_filepath):
                 return render_template('index.html', download_filename=output_filename)
             else:
-                flash('No valid data collected from the servers.')
+                flash('An error occurred while generating the file.')
                 return redirect(request.url)
         else:
             flash('Allowed file types are .xlsx and .xls')

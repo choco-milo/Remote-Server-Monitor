@@ -2,6 +2,8 @@ import pandas as pd
 import paramiko
 from io import StringIO
 import socket
+import openpyxl 
+
 
 
 def connect_to_server(hostname, port, username, password, commands):
@@ -35,44 +37,63 @@ def parse_df_output(output):
         print(f"Error parsing output: {e}")
         return None
 
-def process_servers(servers_df):
-    results = []
-    message = []
+
+
+def process_servers(servers_df, template_path, output_path):
+    messages = [] 
     commands = [
         "df -h --total", 
         "mpstat 1 1 | awk 'NR==4{print $3 + $4 + $5 + $6}'",
         "free -h | awk 'NR==2{print ($3/$2)*100}'"
     ]
 
-    for index, row in servers_df.iterrows():
-        hostname = row['servers']
-        port = row['port']
-        username = row['username']
-        password = row['password']
-        
-        result = connect_to_server(hostname, port, username, password, commands)
-        
-        if isinstance(result, str):  
-            message.append((f"Failed to connect to {hostname, username}: {result}"))
-            continue  
-        
-        df = parse_df_output(result[0])
-        if df is not None and not df.empty:
-            try:
-                disk_usage = df.iloc[-1]["Use%"] if "Use%" in df.columns else 'N/A'
-                cpu = result[1] + '%'
-                ram_usage = result[2].strip() + '%'
+    try:
+        wb = openpyxl.load_workbook(template_path)
+        ws = wb['data']
 
-                results.append({
-                    'hostname': hostname,
-                    'username': username,
-                    'disk_usage': disk_usage,
-                    'cpu': cpu,
-                    'RAM': ram_usage
-                })
-            except Exception as e:
-                message.append((f"Error processing data from {hostname}: {e}"))
-        else:
-            message.append((f"Invalid output from {hostname}, skipping."))
+        for index, row in servers_df.iterrows():
+            hostname = row['servers']  
+            port = row['port']
+            username = row['username']
+            password = row['password']
+            
+            result = connect_to_server(hostname, port, username, password, commands)
+            
+            if isinstance(result, str):  
+                messages.append(f"Failed to connect to {hostname}: {result}")
+                continue  
+            
+            df = parse_df_output(result[0])
+            
+            if df is not None and not df.empty:
+                try:
+                    disk_usage = df.iloc[-1]["Use%"] if "Use%" in df.columns else 'N/A'
+                    cpu = float(result[1]) / 100  
+                    ram_usage = float(result[2].strip()) / 100  
 
-    return results, message
+                    
+                    for excel_row in range(2, ws.max_row + 1):
+                        server_name = ws.cell(row=excel_row, column=1).value
+                        if server_name == hostname:
+                            
+                            ws.cell(row=excel_row, column=3).value = float(disk_usage.strip('%')) / 100  
+                            ws.cell(row=excel_row, column=5).value = cpu                                 
+                            ws.cell(row=excel_row, column=7).value = ram_usage                           
+                           
+
+                            ws.cell(row=excel_row, column=3).number_format = '0.00%'  
+                            ws.cell(row=excel_row, column=5).number_format = '0.00%'  
+                            ws.cell(row=excel_row, column=7).number_format = '0.00%'  
+                except Exception as e:
+                    messages.append(f"Error processing data from {hostname}: {e}")
+            else:
+                messages.append(f"Invalid output from {hostname}, skipping.")
+
+      
+        wb.save(template_path) 
+        wb.save(output_path)  
+       
+        return messages
+
+    except Exception as e:
+        return [f"Error updating Excel template: {str(e)}"]
