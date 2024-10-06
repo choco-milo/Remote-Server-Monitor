@@ -25,7 +25,7 @@ def connect_to_server(hostname, port, username, password, commands):
     except (paramiko.SSHException, socket.timeout) as e:
         return f"Connection error: {str(e)}"
     except Exception as e:
-        return f"An unexpected error occurred: {str(e)}"
+        return f"{str(e)}"
 
 def parse_df_output(output):
     try:
@@ -48,6 +48,7 @@ def process_servers(servers_df, template_path, output_path):
     ]
 
     try:
+        successful_connections = False 
         wb = openpyxl.load_workbook(template_path)
         ws = wb['data']
 
@@ -60,12 +61,13 @@ def process_servers(servers_df, template_path, output_path):
             result = connect_to_server(hostname, port, username, password, commands)
             
             if isinstance(result, str):  
-                messages.append(f"Failed to connect to {hostname}: {result}")
+                messages.append(f"Failed to connect to {hostname, username}: {result}")
                 continue  
             
             df = parse_df_output(result[0])
             
             if df is not None and not df.empty:
+                successful_connections = True
                 try:
                     disk_usage = df.iloc[-1]["Use%"] if "Use%" in df.columns else 'N/A'
                     cpu = float(result[1]) / 100  
@@ -88,8 +90,12 @@ def process_servers(servers_df, template_path, output_path):
                     messages.append(f"Error processing data from {hostname}: {e}")
             else:
                 messages.append(f"Invalid output from {hostname}, skipping.")
+        
+        if not successful_connections:
+            messages.append("Failed to connect to all servers. No file generated.")
+            return messages
+        
 
-      
         wb.save(template_path) 
         wb.save(output_path)  
        

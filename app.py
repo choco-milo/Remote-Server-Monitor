@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, send_file, redirect, flash
 import time
 import os
 import pandas as pd
+import shutil
 from server_monitor import process_servers
 
 app = Flask(__name__)
@@ -10,6 +11,14 @@ app.secret_key = os.environ.get('SECRET_KEY')
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['DOWNLOAD_FOLDER'] = 'downloads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload limit
+
+
+
+if os.path.exists(app.config['UPLOAD_FOLDER']):
+    shutil.rmtree(app.config['UPLOAD_FOLDER'])
+if os.path.exists(app.config['DOWNLOAD_FOLDER']):
+    shutil.rmtree(app.config['DOWNLOAD_FOLDER'])
+
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['DOWNLOAD_FOLDER'], exist_ok=True)
@@ -46,20 +55,23 @@ def index():
             output_filepath = os.path.join(app.config['DOWNLOAD_FOLDER'], output_filename)
 
             messages = process_servers(servers_df, template_path, output_filepath)
+            all_failed = "Failed to connect to all servers. No file generated." in messages
 
             for msg in messages:
                 flash(msg)
 
-            if os.path.exists(output_filepath):
+            if not all_failed and os.path.exists(output_filepath):
                 return render_template('index.html', download_filename=output_filename)
             else:
-                flash('An error occurred while generating the file.')
+                if os.path.exists(output_filepath):
+                    os.remove(output_filepath)
                 return redirect(request.url)
         else:
             flash('Allowed file types are .xlsx and .xls')
             return redirect(request.url)
     
     return render_template('index.html')
+
 
 @app.route('/download/<filename>')
 def download_file(filename):
